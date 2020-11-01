@@ -4,35 +4,13 @@
 #include <tuple>
 #include <map>
 
-struct array_start
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "array_start";
-	}
-};
-struct array_end
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "array_end";
-	}
-};
+#define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
 
-struct object_start
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "object_start";
-	}
-};
-struct object_end
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "object_end";
-	}
-};
+struct array_start {};
+struct array_end {};
+
+struct object_start {};
+struct object_end {};
 
 template < size_t PowerOfTen >
 constexpr int power_of_ten()
@@ -60,15 +38,9 @@ constexpr auto decimal_value()
 	}
 }
 
-template < int Value, int ...Values >
-void debug_values( std::ostream& s )
-{
-	s << Value;
-	if constexpr ( sizeof...(Values) > 0 )
-	{
-		debug_values< Values... >( s );
-	}
-}
+static_assert(
+	decimal_value< 1,0,1 >() == 101
+);
 
 template < int Value, int ...Values >
 struct integer
@@ -76,89 +48,31 @@ struct integer
 	template < int ...Args >
 	static auto merge( integer< Args... > ) -> integer< Value, Values..., Args... >;
 
-	// template < typename T >
-	// using append = decltype( append_helper( std::declval< T >() ) );
-
 	constexpr operator int() const
 	{
 		return decimal_value< Value, Values... >();
 	}
-	
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "integer " << decimal_value< Value, Values... >();
-	}
 };
 
 template < int Value >
-struct lower_case
-{
-	static constexpr auto value = Value;
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "lower case " << Value;
-	}
-};
+struct lower_case {};
 
 template < int Value >
-struct upper_case
-{
-	static constexpr auto value = Value;
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "upper case " << Value;
-	}
-};
+struct upper_case {};
 
-struct equals
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "equals";
-	}
-};
+struct equals {};
 
-struct double_quote
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "double_quote";
-	}
-};
+struct double_quote {};
 
-struct colon
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "colon";
-	}
-};
+struct colon {};
 
-struct comma
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "comma";
-	}
-};
+struct comma {};
 
 template < int C >
-struct whitespace
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "whitespace(" << C << ')';
-	}
-};
+struct whitespace {};
 
 template < int T >
-struct error_type
-{
-	static std::ostream& print( std::ostream &s )
-	{
-		return s << "error_type(" << T << ')';
-	}
-};
+struct error_type {};
 
 template < int C >
 constexpr auto determine_token()
@@ -217,216 +131,6 @@ constexpr auto determine_token()
 	}
 }
 
-template < typename T >
-struct is_followed_by
-{
-	static constexpr auto value = 0;
-};
-
-template < typename T, typename ...Rest >
-void print_children( std::ostream &s, std::tuple< T, Rest... > )
-{
-	T::print( s );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		s << ", ";
-		print_children( s, std::tuple< Rest... >{} );
-	}
-}
-
-void print( std::ostream&, std::tuple<> ) {}
-
-template < typename T, typename ...Rest >
-void print( std::ostream &s, std::tuple< T, Rest... > )
-{
-	T::print( s );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		s << ", ";
-		print_children( s, std::tuple< Rest... >{} );
-	}
-}
-
-template < typename ...Types >
-struct array
-{
-	using tuple_type = std::tuple< Types... >;
-
-	template < typename T >
-	static auto append( T ) -> array< Types..., T >;
-
-	static std::ostream& print( std::ostream &s )
-	{
-		s << "array[ ";
-		::print( s, tuple_type{} );
-		s << " ]";
-		return s;
-	}
-};
-
-struct not_set {};
-
-template < typename Key = not_set, typename Value = not_set >
-struct key_value
-{
-	using key = Key;
-	using value = Value;
-
-	template < typename T >
-	static auto assign_key(T) -> key_value< T, Value >;
-
-	template < typename T >
-	static auto assign_value( T ) -> key_value< Key, T >;
-
-	static std::ostream& print( std::ostream &s )
-	{
-		s << "key_value{ ";
-		::print( s, std::tuple< key >{} );
-		s << ": ";
-		::print( s, std::tuple< value >{} );
-		s << " }";
-		return s;
-	}
-};
-
-template< typename Test, template< typename... > class Ref >
-struct is_specialization : std::false_type {};
-
-template< template< typename... > class Ref, typename ...Args >
-struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
-
-template< typename Test, template < int... > class Type >
-struct is_templated_int_collection : std::false_type {};
-
-template< template < int... > class Type, int ...Args >
-struct is_templated_int_collection< Type< Args... >, Type > : std::true_type {};
-
-template < typename T >
-constexpr inline bool is_integer_v = is_templated_int_collection< T, integer >::value;
-
-template < typename T >
-constexpr inline bool is_whitespace_v = is_templated_int_collection< T, whitespace >::value;
-
-
-template < typename A, typename B >
-constexpr inline bool same_types = std::is_same< A, B >::value;
-
-template < typename ...Types >
-struct token_string;
-
-template < typename Key, typename KeyValue, typename ...Rest >
-auto lookup_key_value()
-{
-	if constexpr ( same_types< Key, typename KeyValue::key > )
-	{
-		return typename KeyValue::value{};
-	}
-	else
-	{
-		static_assert( sizeof...(Rest) == 0, "could not find Key in Key/Value storage" );
-		return lookup_key_value< Key, Rest... >();
-	}
-}
-
-template < typename ...Types >
-struct token_string
-{
-	using type = token_string;
-	using tuple_type = std::tuple< Types... >;
-
-	static std::ostream& print( std::ostream &s )
-	{
-		s << "token_string< ";
-		::print( s, tuple_type{} );
-		s << " >";
-		return s;
-	}
-};
-
-template < typename ...Types >
-using token_string_t = typename token_string< Types... >::type;
-
-template < typename Lambda, int Index = 0 >
-constexpr auto tokenize( Lambda str_lambda )
-{
-    constexpr auto str = str_lambda();
-	if constexpr ( Index < str.size() - 1 )
-	{
-		return token_string_t<
-			decltype( determine_token< str[Index] >() ),
-			decltype( tokenize< Lambda, Index + 1 >( str_lambda ) )
-		>{};
-	}
-	else
-	{
-		return token_string_t<
-			decltype( determine_token< str[Index] >() )
-		>{};
-	}
-}
-
-template < typename ...Rest >
-constexpr auto parse_string( Rest... );
-
-template < typename ...Types >
-struct object
-{
-	template < typename T >
-	static auto append( T ) -> object< Types..., T >;
-
-	using tuple_type = std::tuple< Types... >;
-
-	// using comma_found = 
-
-	template < typename Key >
-	static constexpr auto get()
-	{
-		return lookup_key_value< Key, Types... >();
-	}
-
-	static std::ostream& print( std::ostream &s )
-	{
-		s << "object{ ";
-		::print( s, tuple_type{} );
-		s << " }";
-		return s;
-	}
-};
-
-template < int C, int ...Rest >
-void print_as_char( std::ostream &s )
-{
-	s << char( C );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		print_as_char< Rest... >( s );
-	}
-}
-
-template < int ...Types >
-struct string
-{
-	template < template < int... > class Character, int ...Args >
-	static auto append( Character< Args... > ) -> string< Types..., Args... >;
-
-	static std::ostream& print( std::ostream &s )
-	{
-		s << "string\"";
-		print_as_char< Types... >( s );
-		s << "\"";
-		return s;
-	}
-};
-
-template< typename T >
-constexpr inline bool is_string_v = is_templated_int_collection< T, string >::value;
-
-template< typename T >
-constexpr inline bool is_object_v = is_specialization< T, object >::value;
-
-template< typename T >
-constexpr inline bool is_key_value_v = is_specialization< T, key_value >::value;
-
 namespace helper {
 	template <class T1, class ...T>
 	struct first
@@ -466,6 +170,420 @@ namespace helper {
 	}
 }
 
+template < typename A, typename B >
+constexpr inline bool same_types = std::is_same< std::remove_cv_t< A >, std::remove_cv_t< B > >::value;
+
+template< typename Test, template< typename... > class Ref >
+struct is_specialization : std::false_type {};
+
+template< template< typename... > class Ref, typename ...Args >
+struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
+
+
+template < template < typename... > typename Test, typename ...Args >
+struct contains_specialization_type : std::false_type {};
+
+template < template < typename... > typename Test, typename T, typename ...Args >
+struct contains_specialization_type< Test, T, Args... > 
+{
+	static constexpr inline bool value = is_specialization< T, Test >::value || contains_specialization_type< Test, Args... >::value;
+};
+
+template < typename ...Types >
+struct token_string
+{
+	using type = token_string;
+	using tuple_type = std::tuple< Types... >;
+
+	static constexpr auto append( token_string<> )
+	{
+		return token_string< Types... >{};
+	}
+
+	template < typename A >
+	static constexpr auto append( A )
+	{
+		return token_string< Types..., A >{};
+	}
+
+	template < typename A >
+	static constexpr auto append( token_string< A > )
+	{
+		return append( A{} );
+	}
+
+	template < typename A, typename B, typename ...Args >
+	static constexpr auto append( token_string< A, B, Args... > )
+	{
+		using first_added = decltype( type::append( A{} ) );
+		return first_added::append( token_string< B, Args... >{} );
+	}
+
+	static auto result()
+	{
+		return std::get< 0 >( tuple_type{} );
+	}
+};
+
+
+static_assert(
+	same_types<
+		decltype(
+			token_string<>::append( array_start{} )
+		),
+		token_string< array_start >
+	>
+);
+
+
+static_assert(
+	same_types<
+		decltype(
+			token_string< integer<0> >::append( array_start{} )
+		),
+		token_string< integer<0>, array_start >
+	>
+);
+
+auto make_token_string()
+{
+	return token_string<>{};
+}
+
+template < typename T, typename ...Rest >
+auto make_token_string( T, Rest... )
+{
+	return token_string< T >::append( token_string< Rest... >{} );
+}
+
+template < typename ...Types >
+using make_token_string_t = decltype( make_token_string( Types{}... ) );
+
+template < typename ...Types >
+using token_string_t = decltype( make_token_string( Types{}... ) );
+
+template < typename Test, typename ...Args >
+struct contains_type : std::false_type {};
+
+template < typename Test, typename T, typename ...Args >
+struct contains_type< Test, T, Args... > 
+{
+	static constexpr inline bool value = same_types< Test, T > || contains_type< Test, Args... >::value;
+};
+
+static_assert(
+	same_types<
+		decltype(
+			make_token_string( array_start{}, integer<0>{} )
+		),
+		token_string< array_start, integer<0> >
+	>
+);
+
+static_assert(
+	same_types<
+		decltype(
+			make_token_string( array_start{}, token_string< integer<0> >{} )
+		),
+		token_string< array_start, integer<0> >
+	>
+);
+
+static_assert(
+	same_types<
+		decltype(
+			make_token_string( array_start{}, token_string< integer<0> >{}, array_end{} )
+		),
+		token_string< array_start, integer<0>, array_end >
+	>
+);
+
+
+static_assert(
+	same_types<
+		decltype(
+			make_token_string( array_start{}, token_string< token_string< array_end > >{} )
+		),
+		token_string< array_start, array_end >
+	>
+);
+
+template < int N, typename Value, typename ...Rest >
+auto lookup_nth_value()
+{
+	if constexpr ( N == 0 )
+	{
+		return Value{};
+	}
+	else
+	{
+		return lookup_nth_value< N - 1, Rest... >();
+	}
+}
+
+template < typename ...Types >
+struct array
+{
+	using tuple_type = std::tuple< Types... >;
+
+	template < typename T >
+	using append = array< Types..., T >;
+
+	template < int N >
+	auto operator[]( integer< N > )
+	{
+		return lookup_nth_value< N, Types... >();
+	}
+};
+
+template < typename ...Types >
+struct incomplete_array
+{
+	using end_node = array_end;
+
+	template < typename T >
+	using append = incomplete_array< Types..., T >;
+
+	template < typename ...T >
+	static auto from_token_string( token_string< T... > )
+	{
+		return array< T... >{};
+	}
+
+	using finalize = make_token_string_t< Types... >;
+};
+
+static_assert(
+	same_types<
+		array< integer<1> >::append< integer<3> >,
+		array< integer<1>, integer<3> >
+	>
+);
+
+template < typename Key, typename Value >
+struct key_value
+{
+	using key = Key;
+	using value = Value;
+
+	template < typename T >
+	static auto assign_key(T) -> key_value< T, Value >;
+
+	template < typename T >
+	static auto assign_value( T ) -> key_value< Key, T >;
+};
+
+template< typename Test, template < int... > class Type >
+struct is_templated_int_collection : std::false_type {};
+
+template< template < int... > class Type, int ...Args >
+struct is_templated_int_collection< Type< Args... >, Type > : std::true_type {};
+
+template < typename T >
+constexpr inline bool is_integer_v = is_templated_int_collection< T, integer >::value;
+
+template < typename T >
+constexpr inline bool is_whitespace_v = is_templated_int_collection< T, whitespace >::value;
+
+
+template < typename ...Types >
+struct token_string;
+
+template < typename Key, typename KeyValue, typename ...Rest >
+auto lookup_key_value()
+{
+	if constexpr ( same_types< Key, typename KeyValue::key > )
+	{
+		return typename KeyValue::value{};
+	}
+	else
+	{
+		static_assert( sizeof...(Rest) > 0, "could not find Key in Key/Value storage" );
+		return lookup_key_value< Key, Rest... >();
+	}
+}
+
+template < typename Lambda, int Index = 0 >
+constexpr auto tokenize( Lambda str_lambda )
+{
+    constexpr auto str = str_lambda();
+	if constexpr ( Index < str.size() - 1 )
+	{
+		using first = decltype( determine_token< str[Index] >() );
+		using second = decltype( tokenize< Lambda, Index + 1 >( str_lambda ) );
+
+		return make_token_string( first{}, second{} );
+	}
+	else
+	{
+		return token_string_t<
+			decltype( determine_token< str[Index] >() )
+		>{};
+	}
+}
+
+template < typename ...Rest >
+constexpr auto parse_string( Rest... );
+
+template < typename T >
+auto parse( T );
+
+template < typename ...Types >
+struct object
+{
+	template < typename T >
+	using append = object< Types..., T >;
+
+	static constexpr bool size()
+	{
+		return sizeof...( Types );
+	}
+
+	template < typename T >
+	auto operator[]( T key ) const
+	{
+		return get< decltype( parse( key ) ) >();
+	}
+
+	using tuple_type = std::tuple< Types... >;
+
+	template < typename Key >
+	static constexpr auto get()
+	{
+		return lookup_key_value< Key, Types... >();
+	}
+};
+
+auto parse_key_value_list( token_string<> )
+{
+	return token_string<>{};	
+}
+
+template < typename A >
+auto parse_key_value_list( token_string< A > )
+{
+	return token_string< A >{};
+}
+
+template < typename A, typename ...Rest >
+auto parse_key_value_list( token_string< A, comma, Rest... > )
+{
+	return make_token_string( A{}, parse_key_value_list( Rest{}... ) );
+}
+
+auto remove_commas( token_string<> )
+{
+	return token_string<>{};
+}
+
+template < typename A  >
+auto remove_commas( token_string< A > )
+{
+	return make_token_string( A{} );
+}
+
+template < typename A, typename B, typename ...Rest >
+auto remove_commas( token_string< A, B, Rest... > )
+{
+	if constexpr ( same_types< B, comma > )
+	{
+		if constexpr ( sizeof...(Rest) > 0 )
+		{
+			return make_token_string(
+				A{},
+				remove_commas( make_token_string_t< Rest... >{} )
+			);
+		}
+		else
+		{
+			return make_token_string( A{} );
+		}
+	}
+	else
+	{
+		static_assert( sizeof(B), "expected comma separated list of values" );
+	}
+}
+
+template < typename ...Types >
+struct incomplete_object
+{
+	using end_node = object_end;
+	template < typename T >
+	using append = incomplete_object< Types..., T >;
+
+	using finalize = decltype( make_token_string( Types{}... ) );
+
+	template < typename ...T >
+	static auto from_token_string( token_string< T... > )
+	{
+		return object< T... >{};
+	}
+};
+
+template < typename T >
+struct start_node_helper {};
+
+template <>
+struct start_node_helper< array_start >
+{
+	using type = incomplete_array<>;
+};
+
+template <>
+struct start_node_helper< object_start >
+{
+	using type = incomplete_object<>;
+};
+
+template < typename T >
+using start_node = typename start_node_helper< T >::type;
+
+
+template < int C, int ...Rest >
+void print_as_char( std::ostream &s )
+{
+	s << char( C );
+	if constexpr ( sizeof...( Rest ) > 0 )
+	{
+		print_as_char< Rest... >( s );
+	}
+}
+
+template < int ...Types >
+struct string
+{
+	template < typename T >
+	static auto append(T )
+	{
+		static_assert( sizeof(T)!=sizeof(T) );
+	}
+	template < template < int... > class Character, int ...Args >
+	static auto append( Character< Args... > ) -> string< Types..., Args... >;
+};
+
+template< typename T >
+constexpr inline bool is_string_v = is_templated_int_collection< T, string >::value;
+
+template< typename T >
+constexpr inline bool is_object_v = is_specialization< T, object >::value;
+
+template< typename T >
+constexpr inline bool is_incomplete_object_v = is_specialization< T, incomplete_object >::value;
+
+template< typename T >
+constexpr inline bool is_key_value_v = is_specialization< T, key_value >::value;
+
+template < typename T >
+constexpr inline bool is_token_string_v = is_specialization< T, token_string >::value;
+
+template< typename T >
+constexpr inline bool is_array_v = is_specialization< T, array >::value;
+
+template< typename T >
+constexpr inline bool is_incomplete_array_v = is_specialization< T, incomplete_array >::value;
+
+
 template < size_t N, typename ...Args >
 auto get_nth_element( Args... )
 {
@@ -477,53 +595,6 @@ auto get_nth_element( Template< Args... > )
 {
 	return helper::get_nth_element< N, Args... >();
 }
-
-// unpack nested token_string
-template < typename T, typename ...Types, typename ...Rest >
-struct token_string< T, token_string< Types... >, Rest... >
-{
-	using type = token_string_t< T, Types..., Rest... >;
-};
-template < typename ...Types, typename ...Rest >
-struct token_string< token_string< Types... >, Rest... >
-{
-	using type = token_string_t< Types..., Rest... >;
-};
-
-
-
-template < typename Start, typename End, typename ...T >
-struct specific_start_end_type
-{
-	using first = typename helper::first< T... >::type;
-	using last = typename helper::last< T... >::type;
-
-	static constexpr bool value = std::is_same< first, array_start >::value &&
-		std::is_same< last, array_end >::value;
-};
-
-template < typename ...T >
-using is_array = specific_start_end_type< array_start, array_end, T... >;
-
-template < typename ...T >
-using is_object = specific_start_end_type< object_start, object_end, T... >;
-
-template < typename ...T >
-auto parse( token_string< T... > )
-{
-	if constexpr ( is_array< T... >::value )
-	{
-		
-	}
-	else if constexpr ( is_object< T... >::value )
-	{
-		static_assert( sizeof...(T) == 0 );
-	}
-}
-
-// decltype( tokenize<
-// #include "test.json.array"
-// >::type() ) kakjes;
 
 auto merge_integers( token_string<> ) -> token_string<>;
 
@@ -537,17 +608,10 @@ auto merge_integers( token_string< A, B, Rest... > )
 	using rest_type = decltype( merge_integers( all_but_a_type{} ) );
 	using skip_a_and_continue = token_string_t< A, rest_type >;
 
-	if constexpr ( is_integer_v< A > )
+	if constexpr ( is_integer_v< A > && is_integer_v< B > )
 	{
-		if constexpr ( is_integer_v< B > )
-		{
-			using merged = decltype( A::merge( B{} ) );
-			return merge_integers( token_string_t< merged, Rest... >{} );
-		}
-		else
-		{
-			return skip_a_and_continue{};
-		}
+		using merged = decltype( A::merge( B{} ) );
+		return merge_integers( token_string_t< merged, Rest... >{} );
 	}
 	else
 	{
@@ -564,96 +628,6 @@ static_assert(
 
 static_assert( integer<0,1,2,3>{} == 123 );
 
-auto parse_array( token_string<> ) -> token_string<>;
-template < typename T >
-auto parse_array( token_string<T> ) -> token_string<T>;
-
-
-template < typename A, typename B, typename ...Rest >
-constexpr auto parse_array( token_string< A, B, Rest... > )
-{
-	if constexpr ( same_types< A, array_start > )
-	{
-		return parse_array( token_string_t< array<>, B, Rest... >{} );
-	}
-	else if constexpr ( is_specialization< A, array >::value )
-	{
-		if constexpr ( same_types< B, array_end > )
-		{
-			using remaining_type = decltype( parse_array( token_string_t< Rest... >{} ) );
-			return token_string_t< A, remaining_type >{};
-		}
-		else
-		{
-			return parse_array( 
-				token_string_t<
-					decltype( A::append( B{} ) ),
-					token_string< Rest... >
-				>{}
-			);
-		}
-	}
-	else
-	{
-		using parse_all_but_a = decltype( parse_array( token_string_t< B, Rest... >{} ) );
-		return token_string_t< A, parse_all_but_a >{};
-	}
-}
-
-auto parse_object( token_string<> ) -> token_string<>;
-template < typename A >
-auto parse_object( token_string<A> ) -> token_string<A>;
-
-template < typename A, typename B, typename ...Rest >
-constexpr auto parse_object( token_string< A, B, Rest... > = {} )
-{
-	if constexpr ( same_types< A, object_start > )
-	{
-		return parse_object( 
-			token_string_t< 
-				object<>,
-				B,
-				Rest... 
-			>{}
-		);
-	}
-	else if constexpr ( is_object_v< A > )
-	{
-		if constexpr ( is_key_value_v< B > )
-		{
-			return parse_object( 
-				token_string_t< 
-					decltype( A::append( B{} ) ),
-					Rest... 
-				>{}
-			);
-		}
-		else if constexpr ( same_types< B, object_end > )
-		{
-			using parse_rest = decltype( parse_object( token_string_t< Rest... >{} ) );
-			return token_string_t< A, parse_rest >{};
-		}
-		else if constexpr ( same_types< B, comma > )
-		{
-			return parse_object( 
-				token_string_t< 
-					A,
-					Rest... 
-				>{}
-			);
-		}
-		else
-		{
-			static_assert( sizeof(token_string<A,B,Rest...>)<0, "expected comma, } or key/value" );
-		}
-	}
-	else
-	{
-		using parse_all_but_a = decltype( parse_object( token_string_t< B, Rest... >{} ) );
-		return token_string_t< A, parse_all_but_a >{};
-	}
-}
-
 auto parse_key_value( token_string<> ) -> token_string<>;
 template < typename A >
 auto parse_key_value( token_string<A> ) -> token_string<A>;
@@ -663,21 +637,14 @@ auto parse_key_value( token_string<A,B> ) -> token_string<A,B>;
 template < typename A, typename B, typename C, typename ...Rest >
 constexpr auto parse_key_value( token_string< A, B, C, Rest... > = {} )
 {
-	using all_but_a_type = token_string_t< B, C, Rest... >;
+	using all_but_a_type = make_token_string_t< B, C, Rest... >;
 	using rest_type = decltype( parse_key_value( all_but_a_type{} ) );
-	using skip_a_and_continue = token_string_t< A, rest_type >;
+	using skip_a_and_continue = make_token_string_t< A, rest_type >;
 
-	if constexpr ( is_string_v< A > )
+	if constexpr ( is_string_v< A > && same_types< B, colon > )
 	{
-		if constexpr ( same_types< B, colon > )
-		{
-			using parse_rest = decltype( parse_key_value( token_string_t< Rest...>{} ) );
-			return token_string_t< key_value< A, C >, parse_rest >{};
-		}
-		else
-		{
-			return skip_a_and_continue{};
-		}
+		using parse_rest = decltype( parse_key_value( make_token_string( Rest{}... ) ) );
+		return make_token_string_t< key_value< A, C >, parse_rest >{};
 	}
 	else
 	{
@@ -685,10 +652,98 @@ constexpr auto parse_key_value( token_string< A, B, C, Rest... > = {} )
 	}
 }
 
+template < typename ...Types >
+using parse_key_value_t = decltype( parse_key_value( Types{}... ) );
+
+#if 1
 static_assert(
 	same_types<
-		decltype( parse_key_value( token_string_t< string<1,2,3>, colon, integer<1,2,3> >{} ) ),
-		token_string< key_value< string<1,2,3>, integer<1,2,3> > >
+		parse_key_value_t< make_token_string_t< string<>,colon,string<> > >,
+		make_token_string_t< key_value< string<>,string<> > >
+	>
+);
+
+static_assert(
+	same_types<
+		parse_key_value_t< make_token_string_t< string<>,colon,integer<0> > >,
+		make_token_string_t< key_value< string<>,integer<0> > >
+	>
+);
+
+static_assert(
+	same_types<
+		parse_key_value_t< make_token_string_t< string<>,colon,array<> > >,
+		make_token_string_t< key_value< string<>,array<> > >
+	>
+);
+
+static_assert(
+	same_types<
+		parse_key_value_t< make_token_string_t< string<>,colon,object<>,string<> > >,
+		make_token_string_t< key_value< string<>,object<> >, string<> >
+	>
+);
+#endif
+
+auto parse_array_object( token_string<> ) -> token_string<>;
+template < typename A >
+auto parse_array_object( token_string<A> ) -> decltype( make_token_string( A{} ) );
+
+template < typename A, typename B, typename ...Rest >
+constexpr auto parse_array_object( token_string< A, B, Rest... > )
+{
+	using all_but_a = make_token_string_t< B, Rest... >;
+	using parse_all_but_a = decltype( parse_array_object( all_but_a{} ) );
+
+	if constexpr ( same_types< A, object_start > || same_types< A, array_start > )
+	{
+		return parse_array_object( 
+			make_token_string( 
+				start_node< A >{}, 
+				parse_all_but_a{} 
+			)
+		);
+	}
+	else if constexpr ( is_incomplete_object_v< A > || is_incomplete_array_v< A > )
+	{
+		using rest = make_token_string_t< Rest... >;
+		using parse_rest = decltype( parse_array_object( rest{} ) );
+
+		if constexpr ( same_types< B, typename A::end_node > )
+		{
+			return make_token_string(
+				A::from_token_string(
+					remove_commas(
+						parse_key_value( 
+							parse_array_object(
+								typename A::finalize{} 
+							)
+						)
+					)
+				),
+				parse_array_object( parse_rest{} )
+			);
+		}
+		else
+		{
+			return parse_array_object( 
+				make_token_string(
+					typename A::template append< B >{},
+					parse_rest{}
+				)
+			);
+		}
+	}
+	else
+	{
+		return make_token_string( A{}, parse_all_but_a{} );
+	}
+}
+
+static_assert(
+	same_types<
+		decltype( parse_array_object( make_token_string( incomplete_array<>{}, array_end{} ) ) ),
+		decltype( make_token_string( array<>{} ) )
 	>
 );
 
@@ -739,18 +794,114 @@ constexpr auto remove_whitespace( token_string<> ) -> token_string<>
 template < typename A, typename ...Rest >
 constexpr auto remove_whitespace( token_string< A, Rest... > = {} )
 {
+	using rest_type = decltype( remove_whitespace( token_string_t< Rest... >{} ) );
 	if constexpr ( is_whitespace_v< A > )
 	{
-		return remove_whitespace( token_string_t< Rest... >{} );
+		return remove_whitespace( rest_type{} );
 	}
 	else
 	{
-		using rest_type = decltype( remove_whitespace( token_string_t< Rest... >{} ) );
-		return token_string_t< A, rest_type >{};
+		return make_token_string( A{}, rest_type{} );
 	}
 }
 
-#define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
+template < typename T >
+void print( T )
+{
+	std::cout << typeid(T).name();
+}
+
+template < typename Delimiter, typename T, typename ...Rest >
+void print_delimited( Delimiter delimit, T t, Rest...rest )
+{
+	print( t );
+	if constexpr ( sizeof...( Rest ) > 0 )
+	{
+		std::cout << delimit;
+		print_delimited( delimit, rest... );
+	}
+}
+
+template < typename ...Args >
+void print( token_string< Args... > )
+{
+	std::cout << "token_string<";
+	if constexpr ( sizeof...( Args ) > 0 )
+	{
+		print_delimited( ", ", Args{}... );
+	}
+	std::cout << ">";
+}
+
+template < typename Key, typename Value >
+void print( key_value< Key, Value > )
+{
+	print( Key{} );
+	std::cout << ':';
+	print( Value{} );
+}
+
+template < int C, int ...Rest >
+void print_as_characters()
+{
+	std::cout << char( C );
+	if constexpr ( sizeof...( Rest ) > 0 )
+	{
+		print_as_characters< Rest... >();
+	}
+}
+
+template < int ...Args >
+void print( string< Args... > )
+{
+	std::cout << '"';
+	print_as_characters< Args... >();
+	std::cout << '"';
+}
+
+template < int ...Args >
+void print( integer< Args... > )
+{
+	std::cout << decimal_value< Args... >();
+}
+
+template < typename ...Args >
+void print( object< Args... > )
+{
+	std::cout << "{";
+	if constexpr ( sizeof...( Args ) > 0 )
+	{
+		print_delimited( ',', Args{}... );
+	}
+	std::cout << '}';
+}
+
+template < typename ...Args >
+void print( array< Args... > )
+{
+	std::cout << '[';
+	if constexpr ( sizeof...( Args ) > 0 )
+	{
+		print_delimited( ", ", Args{}... );
+	}
+	std::cout << ']';
+}
+
+template < typename T >
+auto parse( T )
+{
+		// print( T{} );
+
+	using merged_integers = decltype( merge_integers( T{} ) );
+	using parsed_string = decltype( parse_string( merged_integers{} ) );	
+	using removed_whitespace = decltype( remove_whitespace( parsed_string{} ) );
+	// print( removed_whitespace{} );
+	// std::cout << '\n';
+	using parsed_complete = decltype( parse_array_object( removed_whitespace{} ) );
+	// print( parsed_complete{} );
+	// std::cout << '\n';
+	return parsed_complete::result();
+}
 
 int main( int, char ** )
 {
@@ -759,44 +910,37 @@ int main( int, char ** )
 		{
 			"aap":738,
 			"noot":"mies",
-			"kees":[0,1,4]
+			"kees":[0,1,4],
+			"gnoe":[[[1]]],
+			"das":{
+				"zeker":"wel",
+				"a":{
+					"b":{
+						"c":13
+					}
+				},
+				"mooi":10
+			}
 		}
 		)json"
 	);
 
 	const auto tokens = tokenize( json_string );
-	using object = decltype( tokens );
+	// print( tokens );
+	auto parsed = parse( tokens );
+	// print( parsed );
+	// std::cout << parsed[ tokenize( constexpr_string( "\"noot\"" ) ) ] << '\n';
 
-	// object::print( std::cout ) << '\n';
+	// using obj = decltype( get_nth_element< 0 >( parsed ) );
 
-	using object_merged_integer = decltype( merge_integers( object{} ) );
+	// using first_key_val = decltype( get_nth_element< 0 >( obj{} ) );
 
-	using object_merged_integer_string = decltype( parse_string( object_merged_integer{} ) );
-	// object_merged_integer_string::print( std::cout ) << '\n';
-	
-	using no_whitespace = decltype( remove_whitespace( object_merged_integer_string{} ) );
-	// no_whitespace::print( std::cout ) << '\n';
-	
-	using parse_array = decltype( parse_array( no_whitespace{} ) );
+	// print( first_key_val{} );
+	const auto aap = parse( tokenize( constexpr_string( R"json( "kees" )json" ) ) );
+	print( aap );
+	std::cout <<'\n';
 
-	using key_values = decltype( parse_key_value( parse_array{} ) );
-	key_values::print( std::cout ) << '\n';
+	const auto index_2 = parse( tokenize( constexpr_string( R"json( 2 )json" ) ) );
 
-	using parsed = decltype( parse_object( key_values{} ) );
-	// parsed::print( std::cout ) << '\n';
-
-	using obj = decltype( get_nth_element< 0 >( parsed{} ) );
-
-	using first_key_val = decltype( get_nth_element< 0 >( obj{} ) );
-
-	const auto aap = parse_string( tokenize( constexpr_string( R"json("aap")json" ) ) );
-	using aap_t = decltype( get_nth_element< 0 >( aap ) );
-
-	aap_t::print( std::cout ) << std::endl;
-
-	std::cout << 
-	obj::get< aap_t >()
-	 << std::endl;
-
-	return first_key_val::value{};
+	std::cout << parsed.get< decltype( aap ) >()[ index_2 ] << " \n";
 }
