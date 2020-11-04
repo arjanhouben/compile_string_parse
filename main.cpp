@@ -12,11 +12,16 @@ struct array_end {};
 struct object_start {};
 struct object_end {};
 
+
+struct non_integer{};
+
 template < int Value >
 struct integer
 {
 	template < int A >
 	static auto merge( integer< A > ) -> integer< Value * 10 + A >;
+
+	static auto merge( non_integer ) -> integer< Value >;
 
 	constexpr operator int() const
 	{
@@ -374,7 +379,7 @@ constexpr auto find_token( Lambda lambda )
 	{
 		return -1;
 	}
-};
+}
 
 template < int ...Types >
 struct string
@@ -413,7 +418,7 @@ constexpr auto make_integer( Lambda str_lambda )
 	}
 	else
 	{
-		return integer< 0 >{};
+		return non_integer{};
 	}
 }
 
