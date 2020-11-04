@@ -373,18 +373,6 @@ struct key_value
 	static auto assign_value( T ) -> key_value< Key, T >;
 };
 
-template< typename Test, template < int... > class Type >
-struct is_templated_int_collection : std::false_type {};
-
-template< template < int... > class Type, int ...Args >
-struct is_templated_int_collection< Type< Args... >, Type > : std::true_type {};
-
-template < typename T >
-constexpr inline bool is_integer_v = is_templated_int_collection< T, integer >::value;
-
-template < typename T >
-constexpr inline bool is_whitespace_v = is_templated_int_collection< T, whitespace >::value;
-
 
 template < typename ...Types >
 struct token_string;
@@ -403,6 +391,66 @@ auto lookup_key_value()
 	}
 }
 
+template < int Index, typename Token, typename Lambda >
+constexpr auto find_token( Lambda lambda )
+{
+	constexpr auto str = lambda();
+	if constexpr ( Index < str.size() )
+	{
+		if constexpr ( same_types< decltype( determine_token< str[ Index ] >() ), Token > )
+		{
+			return Index;
+		}
+		else
+		{
+			return find_token< Index + 1, Token >( lambda );
+		}
+	}
+	else
+	{
+		return -1;
+	}
+};
+
+template < int ...Types >
+struct string
+{
+	template < typename T >
+	static auto append(T )
+	{
+		static_assert( sizeof(T)!=sizeof(T) );
+	}
+	template < template < int... > class Character, int ...Args >
+	static auto append( Character< Args... > ) -> string< Types..., Args... >;
+};
+
+template < int Start, int End, typename Lambda >
+constexpr auto make_string( Lambda str_lambda )
+{
+    constexpr auto str = str_lambda();
+	if constexpr ( Start < End )
+	{
+		return string< str[ Start ] >::append( make_string< Start + 1, End >( str_lambda ) );
+	}
+	else
+	{
+		return string<>{};
+	}
+}
+
+template< typename Test, template < int... > class Type >
+struct is_templated_int_collection : std::false_type {};
+
+template< template < int... > class Type, int ...Args >
+struct is_templated_int_collection< Type< Args... >, Type > : std::true_type {};
+
+template < typename T >
+constexpr inline bool is_integer_v = is_templated_int_collection< T, integer >::value;
+
+template < typename T >
+constexpr inline bool is_whitespace_v = is_templated_int_collection< T, whitespace >::value;
+
+
 template < typename Lambda, int Index = 0 >
 constexpr auto tokenize( Lambda str_lambda )
 {
@@ -410,9 +458,30 @@ constexpr auto tokenize( Lambda str_lambda )
 	if constexpr ( Index < str.size() - 1 )
 	{
 		using first = decltype( determine_token< str[Index] >() );
-		using second = decltype( tokenize< Lambda, Index + 1 >( str_lambda ) );
 
-		return make_token_string( first{}, second{} );
+		if constexpr ( same_types< first, double_quote > )
+		{
+			constexpr int next_quote = find_token< Index + 1, double_quote >( str_lambda );
+			if constexpr ( next_quote > Index )
+			{
+				using second = decltype( tokenize< Lambda, next_quote + 1 >( str_lambda ) );
+				using string_type = decltype( make_string< Index + 1, next_quote >( str_lambda ) );
+				return make_token_string( string_type{}, second{} );
+			}
+			else
+			{
+				static_assert( next_quote > Index, "quotes not balanced, check your JSON" );
+			}
+		}
+		else if constexpr ( is_whitespace_v< first > )
+		{
+			return tokenize< Lambda, Index + 1 >( str_lambda );
+		}
+		else
+		{
+			using second = decltype( tokenize< Lambda, Index + 1 >( str_lambda ) );
+			return make_token_string( first{}, second{} );
+		}
 	}
 	else
 	{
@@ -421,9 +490,6 @@ constexpr auto tokenize( Lambda str_lambda )
 		>{};
 	}
 }
-
-template < typename ...Rest >
-constexpr auto parse_string( Rest... );
 
 template < typename T >
 auto parse( T );
@@ -549,18 +615,6 @@ void print_as_char( std::ostream &s )
 		print_as_char< Rest... >( s );
 	}
 }
-
-template < int ...Types >
-struct string
-{
-	template < typename T >
-	static auto append(T )
-	{
-		static_assert( sizeof(T)!=sizeof(T) );
-	}
-	template < template < int... > class Character, int ...Args >
-	static auto append( Character< Args... > ) -> string< Types..., Args... >;
-};
 
 template< typename T >
 constexpr inline bool is_string_v = is_templated_int_collection< T, string >::value;
@@ -747,64 +801,6 @@ static_assert(
 	>
 );
 
-auto parse_string( token_string<> ) -> token_string<>;
-template < typename A >
-auto parse_string( token_string<A> ) -> token_string<A>;
-
-template < typename A, typename B, typename ...Rest >
-constexpr auto parse_string( token_string< A, B, Rest... > = {} )
-{
-	if constexpr ( same_types< A, double_quote > )
-	{
-		return parse_string( token_string_t< string<>, B, Rest... >{} );
-	}
-	else if constexpr ( is_string_v< A > )
-	{
-		if constexpr ( same_types< B, double_quote > )
-		{
-			using rest_type = decltype( parse_string( token_string< Rest... >{} ) );
-			return token_string_t< A, rest_type >{};
-		}
-		else
-		{
-			return parse_string(
-				token_string_t<
-					decltype( A::append( B{} ) ),
-					Rest...
-				>{}
-			);
-		}
-	}
-	else
-	{
-		return token_string_t< 
-			A, 
-			decltype(
-				parse_string( token_string_t< B, Rest... >{} )
-			)
-		>{};
-	}
-}
-
-constexpr auto remove_whitespace( token_string<> ) -> token_string<>
-{
-	return {};
-}
-
-template < typename A, typename ...Rest >
-constexpr auto remove_whitespace( token_string< A, Rest... > = {} )
-{
-	using rest_type = decltype( remove_whitespace( token_string_t< Rest... >{} ) );
-	if constexpr ( is_whitespace_v< A > )
-	{
-		return remove_whitespace( rest_type{} );
-	}
-	else
-	{
-		return make_token_string( A{}, rest_type{} );
-	}
-}
-
 template < typename T >
 void print( T )
 {
@@ -890,16 +886,10 @@ void print( array< Args... > )
 template < typename T >
 auto parse( T )
 {
-		// print( T{} );
-
 	using merged_integers = decltype( merge_integers( T{} ) );
-	using parsed_string = decltype( parse_string( merged_integers{} ) );	
-	using removed_whitespace = decltype( remove_whitespace( parsed_string{} ) );
-	// print( removed_whitespace{} );
-	// std::cout << '\n';
-	using parsed_complete = decltype( parse_array_object( removed_whitespace{} ) );
-	// print( parsed_complete{} );
-	// std::cout << '\n';
+	print( merged_integers{} );
+	std::cout << '\n';
+	using parsed_complete = decltype( parse_array_object( merged_integers{} ) );
 	return parsed_complete::result();
 }
 
@@ -913,7 +903,7 @@ int main( int, char ** )
 			"kees":[0,1,4],
 			"gnoe":[[[1]]],
 			"das":{
-				"zeker":"wel",
+				"zeker":"wel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijden",
 				"a":{
 					"b":{
 						"c":13
@@ -928,7 +918,7 @@ int main( int, char ** )
 	const auto tokens = tokenize( json_string );
 	// print( tokens );
 	auto parsed = parse( tokens );
-	// print( parsed );
+	print( parsed );
 	// std::cout << parsed[ tokenize( constexpr_string( "\"noot\"" ) ) ] << '\n';
 
 	// using obj = decltype( get_nth_element< 0 >( parsed ) );
@@ -936,11 +926,12 @@ int main( int, char ** )
 	// using first_key_val = decltype( get_nth_element< 0 >( obj{} ) );
 
 	// print( first_key_val{} );
+	
 	const auto aap = parse( tokenize( constexpr_string( R"json( "kees" )json" ) ) );
 	print( aap );
 	std::cout <<'\n';
 
-	const auto index_2 = parse( tokenize( constexpr_string( R"json( 2 )json" ) ) );
+	// const auto index_2 = parse( tokenize( constexpr_string( R"json( 2 )json" ) ) );
 
-	std::cout << parsed.get< decltype( aap ) >()[ index_2 ] << " \n";
+	// std::cout << parsed.get< decltype( aap ) >()[ index_2 ] << " \n";
 }
