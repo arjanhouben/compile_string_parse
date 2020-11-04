@@ -39,6 +39,8 @@ struct equals {};
 
 struct double_quote {};
 
+struct single_quote {};
+
 struct colon {};
 
 struct comma {};
@@ -87,6 +89,10 @@ constexpr auto determine_token()
 	else if constexpr ( C == '"' )
 	{
 		return double_quote{};
+	}
+	else if constexpr ( C == '\'' )
+	{
+		return single_quote{};
 	}
 	else if constexpr ( C == ':' )
 	{
@@ -458,9 +464,9 @@ constexpr auto tokenize( Lambda str_lambda )
 	{
 		using first = decltype( determine_token< str[Index] >() );
 
-		if constexpr ( same_types< first, double_quote > )
+		if constexpr ( same_types< first, double_quote > || same_types< first, single_quote > )
 		{
-			constexpr int next_quote = find_token< Index + 1, double_quote >( str_lambda );
+			constexpr int next_quote = find_token< Index + 1, first >( str_lambda );
 			if constexpr ( next_quote > Index )
 			{
 				using second = decltype( tokenize< Lambda, next_quote + 1 >( str_lambda ) );
@@ -841,7 +847,8 @@ int main( int, char ** )
 						"c":131237126
 					}
 				},
-				"mooi":10
+				"mooi":10,
+				'drassig':'paard'
 			}
 		}
 		)json"
