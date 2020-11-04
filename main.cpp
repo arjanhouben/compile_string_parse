@@ -12,45 +12,15 @@ struct array_end {};
 struct object_start {};
 struct object_end {};
 
-template < size_t PowerOfTen >
-constexpr int power_of_ten()
-{
-	if constexpr ( PowerOfTen > 0 )
-	{
-		return 10 * power_of_ten< PowerOfTen - 1 >();
-	}
-	else
-	{
-		return 1;
-	}
-}
-
-template < int Value, int ...Values >
-constexpr auto decimal_value()
-{
-	if constexpr ( sizeof...( Values ) > 0 )
-	{
-		return Value * power_of_ten< sizeof...( Values )  >() + decimal_value< Values... >();
-	}
-	else
-	{
-		return Value;
-	}
-}
-
-static_assert(
-	decimal_value< 1,0,1 >() == 101
-);
-
-template < int Value, int ...Values >
+template < int Value >
 struct integer
 {
-	template < int ...Args >
-	static auto merge( integer< Args... > ) -> integer< Value, Values..., Args... >;
+	template < int A >
+	static auto merge( integer< A > ) -> integer< Value * 10 + A >;
 
 	constexpr operator int() const
 	{
-		return decimal_value< Value, Values... >();
+		return Value;
 	}
 };
 
@@ -130,6 +100,64 @@ constexpr auto determine_token()
 		return error_type< C >{};
 	}
 }
+
+#if 0
+constexpr auto determine_token2( char C )
+{
+	if ( C == '[' )
+	{
+		return array_start{};
+	}
+	else if ( C >= '0' && C <= '9' )
+	{	
+		return integer< C - '0' >{};
+	}
+	else if ( C == ']' )
+	{
+		return array_end{};
+	}
+	else if ( C == '{' )
+	{
+		return object_start{};
+	}
+	else if ( C == '}' )
+	{
+		return object_end{};
+	}
+	else if ( C >= 'a' && C <= 'z' )
+	{
+		return lower_case< C >{};
+	}
+	else if ( C >= 'A' && C <= 'Z' )
+	{
+		return upper_case< C >{};
+	}
+	else if ( C == '=' )
+	{
+		return equals{};
+	}
+	else if ( C == '"' )
+	{
+		return double_quote{};
+	}
+	else if ( C == ':' )
+	{
+		return colon{};
+	}
+	else if ( C == ',' )
+	{
+		return comma{};
+	}
+	else if ( C == ' ' || C == '\t' || C == '\n' || C == '\r' )
+	{
+		return whitespace< C >{};
+	}
+	else
+	{
+		return error_type< C >{};
+	}
+}
+#endif
 
 namespace helper {
 	template <class T1, class ...T>
@@ -225,26 +253,6 @@ struct token_string
 	}
 };
 
-
-static_assert(
-	same_types<
-		decltype(
-			token_string<>::append( array_start{} )
-		),
-		token_string< array_start >
-	>
-);
-
-
-static_assert(
-	same_types<
-		decltype(
-			token_string< integer<0> >::append( array_start{} )
-		),
-		token_string< integer<0>, array_start >
-	>
-);
-
 auto make_token_string()
 {
 	return token_string<>{};
@@ -270,43 +278,6 @@ struct contains_type< Test, T, Args... >
 {
 	static constexpr inline bool value = same_types< Test, T > || contains_type< Test, Args... >::value;
 };
-
-static_assert(
-	same_types<
-		decltype(
-			make_token_string( array_start{}, integer<0>{} )
-		),
-		token_string< array_start, integer<0> >
-	>
-);
-
-static_assert(
-	same_types<
-		decltype(
-			make_token_string( array_start{}, token_string< integer<0> >{} )
-		),
-		token_string< array_start, integer<0> >
-	>
-);
-
-static_assert(
-	same_types<
-		decltype(
-			make_token_string( array_start{}, token_string< integer<0> >{}, array_end{} )
-		),
-		token_string< array_start, integer<0>, array_end >
-	>
-);
-
-
-static_assert(
-	same_types<
-		decltype(
-			make_token_string( array_start{}, token_string< token_string< array_end > >{} )
-		),
-		token_string< array_start, array_end >
-	>
-);
 
 template < int N, typename Value, typename ...Rest >
 auto lookup_nth_value()
@@ -352,13 +323,6 @@ struct incomplete_array
 
 	using finalize = make_token_string_t< Types... >;
 };
-
-static_assert(
-	same_types<
-		array< integer<1> >::append< integer<3> >,
-		array< integer<1>, integer<3> >
-	>
-);
 
 template < typename Key, typename Value >
 struct key_value
@@ -438,6 +402,21 @@ constexpr auto make_string( Lambda str_lambda )
 	}
 }
 
+template < int Start, int End, typename Lambda >
+constexpr auto make_integer( Lambda str_lambda )
+{
+    constexpr auto str = str_lambda();
+	if constexpr ( Start < End )
+	{
+		constexpr auto value = str[ Start ] - '0';
+		return integer< value >::merge( make_integer< Start + 1, End >( str_lambda ) );
+	}
+	else
+	{
+		return integer< 0 >{};
+	}
+}
+
 template< typename Test, template < int... > class Type >
 struct is_templated_int_collection : std::false_type {};
 
@@ -450,12 +429,27 @@ constexpr inline bool is_integer_v = is_templated_int_collection< T, integer >::
 template < typename T >
 constexpr inline bool is_whitespace_v = is_templated_int_collection< T, whitespace >::value;
 
+template < int Index, typename Lambda >
+constexpr auto find_first_non_integer( Lambda lambda )
+{
+	constexpr auto str = lambda();
+	using type = decltype( determine_token< str[ Index ] >() );
+	if constexpr ( !is_integer_v< type > )
+	{
+		return Index;
+	}
+	else
+	{
+		return find_first_non_integer< Index + 1 >( lambda );
+	}
+}
+
 
 template < typename Lambda, int Index = 0 >
 constexpr auto tokenize( Lambda str_lambda )
 {
     constexpr auto str = str_lambda();
-	if constexpr ( Index < str.size() - 1 )
+	if constexpr ( Index < str.size() )
 	{
 		using first = decltype( determine_token< str[Index] >() );
 
@@ -477,6 +471,13 @@ constexpr auto tokenize( Lambda str_lambda )
 		{
 			return tokenize< Lambda, Index + 1 >( str_lambda );
 		}
+		else if constexpr ( is_integer_v< first > )
+		{
+			constexpr auto first_non_integer = find_first_non_integer< Index + 1 >( str_lambda );
+			using integer_type = decltype( make_integer< Index, first_non_integer >( str_lambda ) );
+			using second = decltype( tokenize< Lambda, first_non_integer >( str_lambda ) );
+			return make_token_string( integer_type{}, second{} );
+		}
 		else
 		{
 			using second = decltype( tokenize< Lambda, Index + 1 >( str_lambda ) );
@@ -485,9 +486,7 @@ constexpr auto tokenize( Lambda str_lambda )
 	}
 	else
 	{
-		return token_string_t<
-			decltype( determine_token< str[Index] >() )
-		>{};
+		return token_string_t<>{};
 	}
 }
 
@@ -650,38 +649,6 @@ auto get_nth_element( Template< Args... > )
 	return helper::get_nth_element< N, Args... >();
 }
 
-auto merge_integers( token_string<> ) -> token_string<>;
-
-template < typename A >
-auto merge_integers( token_string< A > ) -> token_string< A >;
-
-template < typename A, typename B, typename ...Rest >
-auto merge_integers( token_string< A, B, Rest... > )
-{
-	using all_but_a_type = token_string_t< B, Rest... >;
-	using rest_type = decltype( merge_integers( all_but_a_type{} ) );
-	using skip_a_and_continue = token_string_t< A, rest_type >;
-
-	if constexpr ( is_integer_v< A > && is_integer_v< B > )
-	{
-		using merged = decltype( A::merge( B{} ) );
-		return merge_integers( token_string_t< merged, Rest... >{} );
-	}
-	else
-	{
-		return skip_a_and_continue{};
-	}
-}
-
-static_assert( 
-	same_types<
-		decltype( merge_integers( token_string_t< integer<1>, integer<2,3> >{} ) ),
-		token_string_t< integer<1,2,3> >
-	>
-);
-
-static_assert( integer<0,1,2,3>{} == 123 );
-
 auto parse_key_value( token_string<> ) -> token_string<>;
 template < typename A >
 auto parse_key_value( token_string<A> ) -> token_string<A>;
@@ -708,36 +675,6 @@ constexpr auto parse_key_value( token_string< A, B, C, Rest... > = {} )
 
 template < typename ...Types >
 using parse_key_value_t = decltype( parse_key_value( Types{}... ) );
-
-#if 1
-static_assert(
-	same_types<
-		parse_key_value_t< make_token_string_t< string<>,colon,string<> > >,
-		make_token_string_t< key_value< string<>,string<> > >
-	>
-);
-
-static_assert(
-	same_types<
-		parse_key_value_t< make_token_string_t< string<>,colon,integer<0> > >,
-		make_token_string_t< key_value< string<>,integer<0> > >
-	>
-);
-
-static_assert(
-	same_types<
-		parse_key_value_t< make_token_string_t< string<>,colon,array<> > >,
-		make_token_string_t< key_value< string<>,array<> > >
-	>
-);
-
-static_assert(
-	same_types<
-		parse_key_value_t< make_token_string_t< string<>,colon,object<>,string<> > >,
-		make_token_string_t< key_value< string<>,object<> >, string<> >
-	>
-);
-#endif
 
 auto parse_array_object( token_string<> ) -> token_string<>;
 template < typename A >
@@ -793,13 +730,6 @@ constexpr auto parse_array_object( token_string< A, B, Rest... > )
 		return make_token_string( A{}, parse_all_but_a{} );
 	}
 }
-
-static_assert(
-	same_types<
-		decltype( parse_array_object( make_token_string( incomplete_array<>{}, array_end{} ) ) ),
-		decltype( make_token_string( array<>{} ) )
-	>
-);
 
 template < typename T >
 void print( T )
@@ -858,7 +788,7 @@ void print( string< Args... > )
 template < int ...Args >
 void print( integer< Args... > )
 {
-	std::cout << decimal_value< Args... >();
+	std::cout << integer< Args... >{};
 }
 
 template < typename ...Args >
@@ -886,10 +816,7 @@ void print( array< Args... > )
 template < typename T >
 auto parse( T )
 {
-	using merged_integers = decltype( merge_integers( T{} ) );
-	print( merged_integers{} );
-	std::cout << '\n';
-	using parsed_complete = decltype( parse_array_object( merged_integers{} ) );
+	using parsed_complete = decltype( parse_array_object( T{} ) );
 	return parsed_complete::result();
 }
 
@@ -906,7 +833,7 @@ int main( int, char ** )
 				"zeker":"wel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijden",
 				"a":{
 					"b":{
-						"c":13
+						"c":131237126
 					}
 				},
 				"mooi":10
