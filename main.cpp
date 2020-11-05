@@ -1,8 +1,5 @@
 #include <cstddef>
-#include <array>
 #include <iostream>
-#include <tuple>
-#include <map>
 
 #define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
 
@@ -11,7 +8,6 @@ struct array_end {};
 
 struct object_start {};
 struct object_end {};
-
 
 struct non_integer{};
 
@@ -35,7 +31,8 @@ struct lower_case {};
 template < int Value >
 struct upper_case {};
 
-struct equals {};
+template < int Value >
+struct special_character {};
 
 struct double_quote {};
 
@@ -48,8 +45,8 @@ struct comma {};
 template < int C >
 struct whitespace {};
 
-template < int T >
-struct error_type {};
+template < char T >
+struct error_type : integer< T > {};
 
 template < int C >
 constexpr auto determine_token()
@@ -82,10 +79,6 @@ constexpr auto determine_token()
 	{
 		return upper_case< C >{};
 	}
-	else if constexpr ( C == '=' )
-	{
-		return equals{};
-	}
 	else if constexpr ( C == '"' )
 	{
 		return double_quote{};
@@ -108,104 +101,7 @@ constexpr auto determine_token()
 	}
 	else
 	{
-		return error_type< C >{};
-	}
-}
-
-#if 0
-constexpr auto determine_token2( char C )
-{
-	if ( C == '[' )
-	{
-		return array_start{};
-	}
-	else if ( C >= '0' && C <= '9' )
-	{	
-		return integer< C - '0' >{};
-	}
-	else if ( C == ']' )
-	{
-		return array_end{};
-	}
-	else if ( C == '{' )
-	{
-		return object_start{};
-	}
-	else if ( C == '}' )
-	{
-		return object_end{};
-	}
-	else if ( C >= 'a' && C <= 'z' )
-	{
-		return lower_case< C >{};
-	}
-	else if ( C >= 'A' && C <= 'Z' )
-	{
-		return upper_case< C >{};
-	}
-	else if ( C == '=' )
-	{
-		return equals{};
-	}
-	else if ( C == '"' )
-	{
-		return double_quote{};
-	}
-	else if ( C == ':' )
-	{
-		return colon{};
-	}
-	else if ( C == ',' )
-	{
-		return comma{};
-	}
-	else if ( C == ' ' || C == '\t' || C == '\n' || C == '\r' )
-	{
-		return whitespace< C >{};
-	}
-	else
-	{
-		return error_type< C >{};
-	}
-}
-#endif
-
-namespace helper {
-	template <class T1, class ...T>
-	struct first
-	{
-		typedef T1 type;
-	};
-
-	template <class T1, class ...T>
-	struct last
-	{
-		typedef typename last<T...>::type type;
-	};
-
-	template <class T1>
-	struct last<T1>
-	{
-		typedef T1 type;
-	};
-
-	template < typename T, typename ...Args >
-	inline constexpr bool first_equals_v = std::is_same< typename first< Args... >::type, T >::value;
-
-	template < typename T, typename ...Args >
-	inline constexpr bool last_equals_v = std::is_same< typename last< Args... >::type, T >::value;
-
-	template < size_t N, typename T, typename ...Args >
-	constexpr auto get_nth_element()
-	{
-		if constexpr ( N == 0 )
-		{
-			return std::declval< T >();
-		}
-		else
-		{
-			return get_nth_element< N - 1, Args... >();
-		}
+		return special_character< C >{};
 	}
 }
 
@@ -217,7 +113,6 @@ struct is_specialization : std::false_type {};
 
 template< template< typename... > class Ref, typename ...Args >
 struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
-
 
 template < template < typename... > typename Test, typename ...Args >
 struct contains_specialization_type : std::false_type {};
@@ -232,7 +127,6 @@ template < typename ...Types >
 struct token_string
 {
 	using type = token_string;
-	using tuple_type = std::tuple< Types... >;
 
 	static constexpr auto append( token_string<> )
 	{
@@ -257,11 +151,6 @@ struct token_string
 		using first_added = decltype( type::append( A{} ) );
 		return first_added::append( token_string< B, Args... >{} );
 	}
-
-	static auto result()
-	{
-		return std::get< 0 >( tuple_type{} );
-	}
 };
 
 auto make_token_string()
@@ -281,15 +170,6 @@ using make_token_string_t = decltype( make_token_string( Types{}... ) );
 template < typename ...Types >
 using token_string_t = decltype( make_token_string( Types{}... ) );
 
-template < typename Test, typename ...Args >
-struct contains_type : std::false_type {};
-
-template < typename Test, typename T, typename ...Args >
-struct contains_type< Test, T, Args... > 
-{
-	static constexpr inline bool value = same_types< Test, T > || contains_type< Test, Args... >::value;
-};
-
 template < int N, typename Value, typename ...Rest >
 auto lookup_nth_value()
 {
@@ -306,8 +186,6 @@ auto lookup_nth_value()
 template < typename ...Types >
 struct array
 {
-	using tuple_type = std::tuple< Types... >;
-
 	template < typename T >
 	using append = array< Types..., T >;
 
@@ -455,7 +333,6 @@ constexpr auto find_first_non_integer( Lambda lambda )
 	}
 }
 
-
 template < typename Lambda, int Index = 0 >
 constexpr auto tokenize( Lambda str_lambda )
 {
@@ -515,18 +392,10 @@ struct object
 		return sizeof...( Types );
 	}
 
-	template < typename T >
-	auto operator[]( T key ) const
+	template < int ...Characters >
+	auto operator[]( string< Characters... > ) const
 	{
-		return get< decltype( parse( key ) ) >();
-	}
-
-	using tuple_type = std::tuple< Types... >;
-
-	template < typename Key >
-	static constexpr auto get()
-	{
-		return lookup_key_value< Key, Types... >();
+		return lookup_key_value< string< Characters... >, Types... >();
 	}
 };
 
@@ -646,19 +515,6 @@ constexpr inline bool is_array_v = is_specialization< T, array >::value;
 
 template< typename T >
 constexpr inline bool is_incomplete_array_v = is_specialization< T, incomplete_array >::value;
-
-
-template < size_t N, typename ...Args >
-auto get_nth_element( Args... )
-{
-	return helper::get_nth_element< N, Args... >();
-}
-
-template < size_t N, template < typename ...T > class Template, typename ...Args >
-auto get_nth_element( Template< Args... > )
-{
-	return helper::get_nth_element< N, Args... >();
-}
 
 auto parse_key_value( token_string<> ) -> token_string<>;
 template < typename A >
@@ -824,53 +680,66 @@ void print( array< Args... > )
 	std::cout << ']';
 }
 
-template < typename T >
-auto parse( T )
+template < typename A >
+auto peel_token_string( token_string< A > )
 {
-	using parsed_complete = decltype( parse_array_object( T{} ) );
-	return parsed_complete::result();
+	return A{};
+}
+
+template < typename ...T >
+auto parse( token_string< T... > tokens )
+{
+	using parse_result = decltype( 
+		parse_array_object( tokens )
+	);
+	return peel_token_string( parse_result{} );
+}
+
+template < typename T >
+auto parse( T t )
+{
+	return parse( tokenize( t ) );
 }
 
 int main( int, char ** )
 {
 	const auto json_string = constexpr_string(
-		R"json(
-		{
-			"aap":738,
-			"noot":"mies",
-			"kees":[0,1,4],
-			"gnoe":[[[1]]],
-			"das":{
-				"zeker":"wel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijdenwel dit is een lange string en leidt tot lange compile tijden",
-				"a":{
-					"b":{
-						"c":131237126
-					}
-				},
-				"mooi":10,
-				'drassig':'paard'
-			}
+R"json(
+{
+	"widget": {
+		"debug": "on",
+		"window": {
+			"title": "Sample Konfabulator Widget",
+			"name": "main_window",
+			"width": 500,
+			"height": 500
+		},
+		"image": { 
+			"src": "Images/Sun.png",
+			"name": "sun1",
+			"hOffset": 250,
+			"vOffset": 250,
+			"alignment": "center"
+		},
+		"text": {
+			"data": "Click Here",
+			"size": 36,
+			"style": "bold",
+			"name": "text1",
+			"hOffset": 250,
+			"vOffset": 100,
+			"alignment": "center",
+			"onMouseUp": "sun1.opacity = (sun1.opacity / 100) * 90;"
 		}
-		)json"
+	}
+} 
+)json"
 	);
 
-	const auto tokens = tokenize( json_string );
-	// print( tokens );
-	auto parsed = parse( tokens );
-	print( parsed );
-	// std::cout << parsed[ tokenize( constexpr_string( "\"noot\"" ) ) ] << '\n';
-
-	// using obj = decltype( get_nth_element< 0 >( parsed ) );
-
-	// using first_key_val = decltype( get_nth_element< 0 >( obj{} ) );
-
-	// print( first_key_val{} );
+	auto parsed = parse( json_string );
+	auto widget = parse( constexpr_string( "\"widget\"" ) );
+	auto text = parse( constexpr_string( "\"text\"" ) );
+	auto size = parse( constexpr_string( "\"size\"" ) );
 	
-	const auto aap = parse( tokenize( constexpr_string( R"json( "kees" )json" ) ) );
-	print( aap );
-	std::cout <<'\n';
-
-	// const auto index_2 = parse( tokenize( constexpr_string( R"json( 2 )json" ) ) );
-
-	// std::cout << parsed.get< decltype( aap ) >()[ index_2 ] << " \n";
+	return parsed[ widget ][ text ][ size ];
 }
