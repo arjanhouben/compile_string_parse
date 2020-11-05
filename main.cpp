@@ -45,9 +45,6 @@ struct comma {};
 template < int C >
 struct whitespace {};
 
-template < char T >
-struct error_type : integer< T > {};
-
 template < int C >
 constexpr auto determine_token()
 {
@@ -114,55 +111,40 @@ struct is_specialization : std::false_type {};
 template< template< typename... > class Ref, typename ...Args >
 struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
 
-template < template < typename... > typename Test, typename ...Args >
-struct contains_specialization_type : std::false_type {};
-
-template < template < typename... > typename Test, typename T, typename ...Args >
-struct contains_specialization_type< Test, T, Args... > 
-{
-	static constexpr inline bool value = is_specialization< T, Test >::value || contains_specialization_type< Test, Args... >::value;
-};
-
 template < typename ...Types >
 struct token_string
 {
 	using type = token_string;
 
-	static constexpr auto append( token_string<> )
-	{
-		return token_string< Types... >{};
-	}
+	static constexpr auto append( token_string<> ) -> token_string< Types... >;
 
 	template < typename A >
-	static constexpr auto append( A )
-	{
-		return token_string< Types..., A >{};
-	}
+	static constexpr auto append( A ) -> token_string< Types..., A >;
 
 	template < typename A >
 	static constexpr auto append( token_string< A > )
 	{
-		return append( A{} );
+		return decltype( append( A{} ) ){};
 	}
 
 	template < typename A, typename B, typename ...Args >
 	static constexpr auto append( token_string< A, B, Args... > )
 	{
 		using first_added = decltype( type::append( A{} ) );
-		return first_added::append( token_string< B, Args... >{} );
+		return decltype( first_added::append( token_string< B, Args... >{} ) ){};
 	}
 };
 
-auto make_token_string()
-{
-	return token_string<>{};
-}
+auto make_token_string() -> token_string<>;
+// {
+// 	return token_string<>{};
+// }
 
 template < typename T, typename ...Rest >
-auto make_token_string( T, Rest... )
-{
-	return token_string< T >::append( token_string< Rest... >{} );
-}
+auto make_token_string( T, Rest... ) -> decltype( token_string< T >::append( token_string< Rest... >{} ) );
+// {
+// 	return token_string< T >::append( token_string< Rest... >{} );
+// }
 
 template < typename ...Types >
 using make_token_string_t = decltype( make_token_string( Types{}... ) );
@@ -280,7 +262,7 @@ struct string
 template < int Start, int End, typename Lambda >
 constexpr auto make_string( Lambda str_lambda )
 {
-    constexpr auto str = str_lambda();
+	constexpr auto str = str_lambda();
 	if constexpr ( Start < End )
 	{
 		return string< str[ Start ] >::append( make_string< Start + 1, End >( str_lambda ) );
@@ -294,7 +276,7 @@ constexpr auto make_string( Lambda str_lambda )
 template < int Start, int End, typename Lambda >
 constexpr auto make_integer( Lambda str_lambda )
 {
-    constexpr auto str = str_lambda();
+	constexpr auto str = str_lambda();
 	if constexpr ( Start < End )
 	{
 		constexpr auto value = str[ Start ] - '0';
@@ -336,7 +318,7 @@ constexpr auto find_first_non_integer( Lambda lambda )
 template < typename Lambda, int Index = 0 >
 constexpr auto tokenize( Lambda str_lambda )
 {
-    constexpr auto str = str_lambda();
+	constexpr auto str = str_lambda();
 	if constexpr ( Index < str.size() )
 	{
 		using first = decltype( determine_token< str[Index] >() );
@@ -569,32 +551,36 @@ constexpr auto parse_array_object( token_string< A, B, Rest... > )
 
 		if constexpr ( same_types< B, typename A::end_node > )
 		{
-			return make_token_string(
-				A::from_token_string(
-					remove_commas(
-						parse_key_value( 
-							parse_array_object(
-								typename A::finalize{} 
+			return make_token_string_t<
+				decltype(
+					A::from_token_string(
+						remove_commas(
+							parse_key_value( 
+								parse_array_object(
+									typename A::finalize{} 
+								)
 							)
 						)
 					)
 				),
-				parse_array_object( parse_rest{} )
-			);
+				decltype(
+					parse_array_object( parse_rest{} )
+				)
+			>{};
 		}
 		else
 		{
 			return parse_array_object( 
-				make_token_string(
-					typename A::template append< B >{},
-					parse_rest{}
-				)
+				make_token_string_t<
+					typename A::template append< B >,
+					parse_rest
+				>{}
 			);
 		}
 	}
 	else
 	{
-		return make_token_string( A{}, parse_all_but_a{} );
+		return make_token_string_t< A, parse_all_but_a >{};
 	}
 }
 
@@ -681,10 +667,7 @@ void print( array< Args... > )
 }
 
 template < typename A >
-auto peel_token_string( token_string< A > )
-{
-	return A{};
-}
+auto peel_token_string( token_string< A > ) -> A;
 
 template < typename ...T >
 auto parse( token_string< T... > tokens )
@@ -692,13 +675,13 @@ auto parse( token_string< T... > tokens )
 	using parse_result = decltype( 
 		parse_array_object( tokens )
 	);
-	return peel_token_string( parse_result{} );
+	return decltype( peel_token_string( parse_result{} ) ){};
 }
 
 template < typename T >
 auto parse( T t )
 {
-	return parse( tokenize( t ) );
+	return decltype( parse( tokenize( t ) ) ){};
 }
 
 int main( int, char ** )
