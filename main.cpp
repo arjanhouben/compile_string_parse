@@ -1,7 +1,7 @@
 #include <cstddef>
-#include <iostream>
 #include <string_view>
 #include <type_traits>
+#include <array>
 
 #define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
 
@@ -12,6 +12,34 @@ struct object_start {};
 struct object_end {};
 
 struct non_integer{};
+
+template < int Value, int Length = 0 >
+constexpr auto number_of_digits()
+{
+	if constexpr ( Value >= 10 )
+	{
+		return 1 + number_of_digits< Value / 10, Length + 1 >();
+	}
+	else
+	{
+		return 1;
+	}
+};
+
+template < int Value, int Index = 0, typename Array >
+constexpr void integer_to_array( Array &array )
+{
+	const auto last = array.size() - 1;
+	if constexpr ( Value >= 10 )
+	{
+		integer_to_array< Value / 10, Index + 1 >( array );
+		array[ last - Index ] = '0' + Value % 10;
+	}
+	else
+	{
+		array[ last- Index ] = '0' + Value;
+	}
+}
 
 template < int Value >
 struct integer
@@ -24,6 +52,20 @@ struct integer
 	constexpr operator int() const
 	{
 		return Value;
+	}
+
+	static constexpr std::array< char, number_of_digits< Value >() > to_string()
+	{
+		std::array< char, number_of_digits< Value >() > result;
+		integer_to_array< Value >( result );
+		return result;
+	}
+
+	static constexpr auto to_char_array()
+	{
+		std::array< char, number_of_digits< Value >() > result;
+		integer_to_array< Value >( result );
+		return result;
 	}
 };
 
@@ -113,6 +155,23 @@ struct is_specialization : std::false_type {};
 template< template< typename... > class Ref, typename ...Args >
 struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
 
+
+template < size_t A, size_t B >
+constexpr auto add( std::array< char, A > a, std::array< char, B > b )
+{
+	std::array< char, A + B > result;
+	auto dst = result.data();
+	for ( auto c : a ) *dst++ = c;
+	for ( auto c : b ) *dst++ = c;
+	return result;
+}
+
+template < size_t A, size_t B, typename ...Rest >
+constexpr auto add( std::array< char, A > a, std::array< char, B > b, Rest ...rest )
+{
+	return add( add( a, b ), rest... );
+}
+
 template < typename ...Types >
 struct token_string
 {
@@ -172,6 +231,11 @@ struct array
 	{
 		return lookup_nth_value< N, Types... >();
 	}
+
+	static constexpr auto to_char_array()
+	{
+		return add( std::array< char, 1 >{ '[' }, Types{}..., std::array< char, 1 >{ ']' } );
+	}
 };
 
 template < typename ...Types >
@@ -202,6 +266,11 @@ struct key_value
 
 	template < typename T >
 	static auto assign_value( T ) -> key_value< Key, T >;
+
+	static constexpr auto to_char_array()
+	{
+		return add( key::to_char_array(), std::array< char, 1 >{ ':' }, value::to_char_array() );
+	}
 };
 
 
@@ -253,6 +322,15 @@ struct string
 	}
 	template < template < int... > class Character, int ...Args >
 	static auto append( Character< Args... > ) -> string< Types..., Args... >;
+
+	static constexpr auto to_char_array()
+	{
+		return add( 
+			std::array< char, 1 >{ '"' },
+			std::array< char, 1 >{ static_cast< char >( Types ) }...,
+			std::array< char, 1 >{ '"' }
+		);
+	}
 };
 
 template < int Start, int End, typename Lambda >
@@ -375,6 +453,11 @@ struct object
 	{
 		return lookup_key_value< string< Characters... >, Types... >();
 	}
+
+	static constexpr auto to_char_array()
+	{
+		return add( std::array< char, 1 >{ '{' }, Types::to_char_array()..., std::array< char, 1 >{ '}'} );
+	}
 };
 
 auto parse_key_value_list( token_string<> ) -> token_string<>;
@@ -447,17 +530,6 @@ struct start_node_helper< object_start >
 
 template < typename T >
 using start_node = typename start_node_helper< T >::type;
-
-
-template < int C, int ...Rest >
-void print_as_char( std::ostream &s )
-{
-	s << char( C );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		print_as_char< Rest... >( s );
-	}
-}
 
 template< typename T >
 constexpr inline bool is_string_v = is_templated_int_collection< T, string >::value;
@@ -566,88 +638,6 @@ constexpr auto parse_array_object( token_string< A, B, Rest... > )
 	}
 }
 
-template < typename T >
-void print( T )
-{
-	std::cout << typeid(T).name();
-}
-
-template < typename Delimiter, typename T, typename ...Rest >
-void print_delimited( Delimiter delimit, T t, Rest...rest )
-{
-	print( t );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		std::cout << delimit;
-		print_delimited( delimit, rest... );
-	}
-}
-
-template < typename ...Args >
-void print( token_string< Args... > )
-{
-	std::cout << "token_string<";
-	if constexpr ( sizeof...( Args ) > 0 )
-	{
-		print_delimited( ", ", Args{}... );
-	}
-	std::cout << ">";
-}
-
-template < typename Key, typename Value >
-void print( key_value< Key, Value > )
-{
-	print( Key{} );
-	std::cout << ':';
-	print( Value{} );
-}
-
-template < int C, int ...Rest >
-void print_as_characters()
-{
-	std::cout << char( C );
-	if constexpr ( sizeof...( Rest ) > 0 )
-	{
-		print_as_characters< Rest... >();
-	}
-}
-
-template < int ...Args >
-void print( string< Args... > )
-{
-	std::cout << '"';
-	print_as_characters< Args... >();
-	std::cout << '"';
-}
-
-template < int ...Args >
-void print( integer< Args... > )
-{
-	std::cout << integer< Args... >{};
-}
-
-template < typename ...Args >
-void print( object< Args... > )
-{
-	std::cout << "{";
-	if constexpr ( sizeof...( Args ) > 0 )
-	{
-		print_delimited( ',', Args{}... );
-	}
-	std::cout << '}';
-}
-
-template < typename ...Args >
-void print( array< Args... > )
-{
-	std::cout << '[';
-	if constexpr ( sizeof...( Args ) > 0 )
-	{
-		print_delimited( ", ", Args{}... );
-	}
-	std::cout << ']';
-}
-
 template < typename A >
 auto peel_token_string( token_string< A > ) -> A;
 
@@ -664,6 +654,12 @@ template < typename T >
 auto parse( T t )
 {
 	return decltype( parse( tokenize( t ) ) ){};
+}
+
+template < size_t N >
+auto zero_terminate( std::array< char, N > str )
+{
+	return add( str, std::array< char, 1 >{ 0 } );
 }
 
 int main( int, char ** )
@@ -702,6 +698,9 @@ R"json(
 	);
 
 	auto parsed = parse( json_string );
+
+	std::puts( zero_terminate( parsed.to_char_array() ).data() );
+
 	auto widget = parse( constexpr_string( "\"widget\"" ) );
 	auto text = parse( constexpr_string( "\"text\"" ) );
 	auto size = parse( constexpr_string( "\"size\"" ) );
