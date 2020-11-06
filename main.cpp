@@ -1,5 +1,7 @@
 #include <cstddef>
 #include <iostream>
+#include <string_view>
+#include <type_traits>
 
 #define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
 
@@ -136,15 +138,9 @@ struct token_string
 };
 
 auto make_token_string() -> token_string<>;
-// {
-// 	return token_string<>{};
-// }
 
 template < typename T, typename ...Rest >
 auto make_token_string( T, Rest... ) -> decltype( token_string< T >::append( token_string< Rest... >{} ) );
-// {
-// 	return token_string< T >::append( token_string< Rest... >{} );
-// }
 
 template < typename ...Types >
 using make_token_string_t = decltype( make_token_string( Types{}... ) );
@@ -381,33 +377,19 @@ struct object
 	}
 };
 
-auto parse_key_value_list( token_string<> )
-{
-	return token_string<>{};	
-}
+auto parse_key_value_list( token_string<> ) -> token_string<>;
 
 template < typename A >
-auto parse_key_value_list( token_string< A > )
-{
-	return token_string< A >{};
-}
+auto parse_key_value_list( token_string< A > ) -> token_string< A >;
 
 template < typename A, typename ...Rest >
-auto parse_key_value_list( token_string< A, comma, Rest... > )
-{
-	return make_token_string( A{}, parse_key_value_list( Rest{}... ) );
-}
+auto parse_key_value_list( token_string< A, comma, Rest... > ) -> 
+	make_token_string_t< A, decltype( parse_key_value_list( Rest{}... ) ) >;
 
-auto remove_commas( token_string<> )
-{
-	return token_string<>{};
-}
+auto remove_commas( token_string<> ) -> token_string<>;
 
 template < typename A  >
-auto remove_commas( token_string< A > )
-{
-	return make_token_string( A{} );
-}
+auto remove_commas( token_string< A > ) -> make_token_string_t< A >;
 
 template < typename A, typename B, typename ...Rest >
 auto remove_commas( token_string< A, B, Rest... > )
@@ -416,14 +398,14 @@ auto remove_commas( token_string< A, B, Rest... > )
 	{
 		if constexpr ( sizeof...(Rest) > 0 )
 		{
-			return make_token_string(
-				A{},
-				remove_commas( make_token_string_t< Rest... >{} )
-			);
+			return make_token_string_t<
+				A,
+				decltype( remove_commas( make_token_string_t< Rest... >{} ) )
+			>{};
 		}
 		else
 		{
-			return make_token_string( A{} );
+			return make_token_string_t< A >{};
 		}
 	}
 	else
