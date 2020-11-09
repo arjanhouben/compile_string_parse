@@ -2,6 +2,8 @@
 #include <string_view>
 #include <type_traits>
 #include <array>
+#include <cstdio>
+#include <variant>
 
 #define constexpr_string(...) ([]() constexpr -> std::string_view { return __VA_ARGS__; })
 
@@ -41,6 +43,90 @@ constexpr void integer_to_array( Array &array )
 	}
 }
 
+template < int ...Types >
+struct string;
+
+template < int Index = 0, int A, int ...Rest, typename Array >
+constexpr void fill_array( string< A, Rest... >, Array &array )
+{
+	array[ Index ] = A;
+	if constexpr ( sizeof...(Rest) > 0 )
+	{
+		fill_array< Index + 1 >( string< Rest... >{}, array );
+	}
+}
+
+template < size_t A, size_t B >
+constexpr auto add( std::array< char, A > a, std::array< char, B > b )
+{
+	std::array< char, A + B > result;
+	auto dst = result.data();
+	for ( auto c : a ) *dst++ = c;
+	for ( auto c : b ) *dst++ = c;
+	return result;
+}
+
+template < size_t A, size_t B, typename ...Rest >
+constexpr auto add( std::array< char, A > a, std::array< char, B > b, Rest ...rest )
+{
+	return add( add( a, b ), rest... );
+}
+
+template < int ...Types >
+struct string
+{
+	template < typename T >
+	static auto append( T )
+	{
+		static_assert( sizeof(T)!=sizeof(T) );
+	}
+	template < template < int... > class Character, int ...Args >
+	static auto append( Character< Args... > ) -> string< Types..., Args... >;
+
+	template < typename T, typename ...Rest >
+	static auto append( T, Rest... ) -> decltype( append( T{} ).append( Rest{}... ) );
+
+	static constexpr auto to_string()
+	{
+		return string< '"' >::append( string{} ).append( string< '"' >{} );
+	}
+
+	static const std::array< char, sizeof...( Types ) >& characters()
+	{
+		static const auto result = []
+		{
+			std::array< char, sizeof...( Types ) > result;
+			fill_array( string< Types... >{}, result );
+			return result;
+		}();
+		return result;
+	}
+	
+	static constexpr auto to_stringview()
+	{
+		return std::string_view( characters().data(), characters().size() );
+	}
+};
+
+template < int Value >
+constexpr auto integer_to_string()
+{
+	using result = string< Value % 10 + '0' >;
+	if constexpr ( Value >= 10 )
+	{
+		using more_significand_digit = decltype( integer_to_string< Value / 10 >() );
+		return decltype( more_significand_digit::append( result{} ) ){};
+	}
+	else
+	{
+		return string< Value + '0' >{};
+	}
+}
+
+
+template < typename A, typename B >
+constexpr inline bool same_types = std::is_same< std::remove_cv_t< A >, std::remove_cv_t< B > >::value;
+
 template < int Value >
 struct integer
 {
@@ -54,18 +140,9 @@ struct integer
 		return Value;
 	}
 
-	static constexpr std::array< char, number_of_digits< Value >() > to_string()
+	static constexpr auto to_string()
 	{
-		std::array< char, number_of_digits< Value >() > result;
-		integer_to_array< Value >( result );
-		return result;
-	}
-
-	static constexpr auto to_char_array()
-	{
-		std::array< char, number_of_digits< Value >() > result;
-		integer_to_array< Value >( result );
-		return result;
+		return decltype( integer_to_string< Value >() ){};
 	}
 };
 
@@ -146,31 +223,12 @@ constexpr auto determine_token()
 	}
 }
 
-template < typename A, typename B >
-constexpr inline bool same_types = std::is_same< std::remove_cv_t< A >, std::remove_cv_t< B > >::value;
-
 template< typename Test, template< typename... > class Ref >
 struct is_specialization : std::false_type {};
 
 template< template< typename... > class Ref, typename ...Args >
 struct is_specialization< Ref< Args... >, Ref > : std::true_type {};
 
-
-template < size_t A, size_t B >
-constexpr auto add( std::array< char, A > a, std::array< char, B > b )
-{
-	std::array< char, A + B > result;
-	auto dst = result.data();
-	for ( auto c : a ) *dst++ = c;
-	for ( auto c : b ) *dst++ = c;
-	return result;
-}
-
-template < size_t A, size_t B, typename ...Rest >
-constexpr auto add( std::array< char, A > a, std::array< char, B > b, Rest ...rest )
-{
-	return add( add( a, b ), rest... );
-}
 
 template < typename ...Types >
 struct token_string
@@ -220,6 +278,27 @@ auto lookup_nth_value()
 	}
 }
 
+void insert_comma() {}
+
+template < typename A >
+auto insert_comma( A a )
+{
+	return a;
+}
+
+template < int ...A, int ...B, typename ...Args >
+auto insert_comma( string< A... >, string< B... >, Args... args )
+{
+	if constexpr ( sizeof...( Args ) > 0 )
+	{
+		return string< A..., ',' >::append( insert_comma( string< B... >{}, args... ) );
+	}
+	else
+	{
+		return string< A..., ',', B... >{};
+	}
+}
+
 template < typename ...Types >
 struct array
 {
@@ -232,9 +311,20 @@ struct array
 		return lookup_nth_value< N, Types... >();
 	}
 
-	static constexpr auto to_char_array()
+	static constexpr auto to_string()
 	{
-		return add( std::array< char, 1 >{ '[' }, Types{}..., std::array< char, 1 >{ ']' } );
+		if constexpr ( sizeof...(Types) > 0 )
+		{
+			return string< '[' >::append( 
+				insert_comma( Types::to_string()... ) 
+			).append( 
+				string< ']' >{}
+			);
+		}
+		else
+		{
+			return string< '[', ']' >{};
+		}
 	}
 };
 
@@ -267,9 +357,11 @@ struct key_value
 	template < typename T >
 	static auto assign_value( T ) -> key_value< Key, T >;
 
-	static constexpr auto to_char_array()
+	static constexpr auto to_string()
 	{
-		return add( key::to_char_array(), std::array< char, 1 >{ ':' }, value::to_char_array() );
+		return decltype(
+			key::to_string().append( string< ':' >{} ).append( value::to_string() )
+		){};
 	}
 };
 
@@ -312,34 +404,15 @@ constexpr auto find_token( Lambda lambda )
 	}
 }
 
-template < int ...Types >
-struct string
-{
-	template < typename T >
-	static auto append(T )
-	{
-		static_assert( sizeof(T)!=sizeof(T) );
-	}
-	template < template < int... > class Character, int ...Args >
-	static auto append( Character< Args... > ) -> string< Types..., Args... >;
-
-	static constexpr auto to_char_array()
-	{
-		return add( 
-			std::array< char, 1 >{ '"' },
-			std::array< char, 1 >{ static_cast< char >( Types ) }...,
-			std::array< char, 1 >{ '"' }
-		);
-	}
-};
-
 template < int Start, int End, typename Lambda >
 constexpr auto make_string( Lambda str_lambda )
 {
 	constexpr auto str = str_lambda();
 	if constexpr ( Start < End )
 	{
-		return string< str[ Start ] >::append( make_string< Start + 1, End >( str_lambda ) );
+		return decltype(
+			string< str[ Start ] >::append( make_string< Start + 1, End >( str_lambda ) )
+		){};
 	}
 	else
 	{
@@ -389,7 +462,7 @@ constexpr auto find_first_non_integer( Lambda lambda )
 	}
 }
 
-template < typename Lambda, int Index = 0 >
+template < typename Lambda, size_t Index = 0 >
 constexpr auto tokenize( Lambda str_lambda )
 {
 	constexpr auto str = str_lambda();
@@ -403,6 +476,7 @@ constexpr auto tokenize( Lambda str_lambda )
 			if constexpr ( next_quote > Index )
 			{
 				using second = decltype( tokenize< Lambda, next_quote + 1 >( str_lambda ) );
+
 				using string_type = decltype( make_string< Index + 1, next_quote >( str_lambda ) );
 				return make_token_string( string_type{}, second{} );
 			}
@@ -454,9 +528,16 @@ struct object
 		return lookup_key_value< string< Characters... >, Types... >();
 	}
 
-	static constexpr auto to_char_array()
+	static constexpr auto to_string()
 	{
-		return add( std::array< char, 1 >{ '{' }, Types::to_char_array()..., std::array< char, 1 >{ '}'} );
+		// using middle = string<  >;
+		return decltype(
+			string< '{' >::append( 
+				insert_comma(
+					Types::to_string()...
+				)
+			).append( string< '}' >{} )
+		){};
 	}
 };
 
@@ -656,12 +737,6 @@ auto parse( T t )
 	return decltype( parse( tokenize( t ) ) ){};
 }
 
-template < size_t N >
-auto zero_terminate( std::array< char, N > str )
-{
-	return add( str, std::array< char, 1 >{ 0 } );
-}
-
 int main( int, char ** )
 {
 	const auto json_string = constexpr_string(
@@ -692,15 +767,17 @@ R"json(
 			"alignment": "center",
 			"onMouseUp": "sun1.opacity = (sun1.opacity / 100) * 90;"
 		}
-	}
+	},
+	"array":[],
+	"array2":[3,4]
 } 
 )json"
 	);
 
 	auto parsed = parse( json_string );
 
-	std::puts( zero_terminate( parsed.to_char_array() ).data() );
-
+	fwrite( parsed.to_string().to_stringview().data(), sizeof( char ), parsed.to_string().to_stringview().size(), stdout );
+	
 	auto widget = parse( constexpr_string( "\"widget\"" ) );
 	auto text = parse( constexpr_string( "\"text\"" ) );
 	auto size = parse( constexpr_string( "\"size\"" ) );
