@@ -278,20 +278,19 @@ auto lookup_nth_value()
 	}
 }
 
-void insert_comma() {}
+void insert_comma();
 
 template < typename A >
-auto insert_comma( A a )
-{
-	return a;
-}
+auto insert_comma( A ) -> A;
 
 template < int ...A, int ...B, typename ...Args >
-auto insert_comma( string< A... >, string< B... >, Args... args )
+auto insert_comma( string< A... >, string< B... >, Args... )
 {
 	if constexpr ( sizeof...( Args ) > 0 )
 	{
-		return string< A..., ',' >::append( insert_comma( string< B... >{}, args... ) );
+		return string< A..., ',' >::append( 
+			decltype( insert_comma( string< B... >{}, Args{}... ) ){}
+		);
 	}
 	else
 	{
